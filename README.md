@@ -73,6 +73,38 @@ npm run dev
 | 数据契约 | `data_contract` | 契约定义 | 契约编号、数据集、Schema约束 |
 | 实验配置 | `ab_config` | AB实验 | 实验编号、实验名称、分流比例 |
 
+### 字段变更对照
+
+`/field-diff` 是跨模块的版本化字段核对视图（后端 `app/services/field_diff.py`，
+路由 `app/routers/field_diff.py`），不属于上面 22 个业务模块：
+
+- 来源扫描按 `(来源, 批次)` 幂等，同一批次并发扫描只留一份生效快照，
+  其余请求复用同一个快照；详情见 `POST /api/field-diff/scans`。
+- 字段身份是 `(来源ID, 字段标识)`：不同来源的同名列不会合并；字段标识仍在、
+  只是物理列改名时，别名仍指向同一物理列，按「别名沿用」处理。
+- 每次对照都冻结基准快照、目标快照、别名版本和输入摘要；已确认批次不可改写，
+  待确认差异不能并入已确认批次。
+- 语义模型的「投产模型」动作会读取差异明细、生成字段校验记录并回写结论；
+  先读取后写结论，之后更正别名只追加新版本，重新查询本次投产时同时给出
+  当次冻结结论与当前别名下的度量可投产性。
+- `GET /api/field-diff/confirmed-missing?field_id=…` 可按字段标识回查上一轮
+  已确认的缺列。
+
+主要接口：
+
+```text
+POST /api/field-diff/scans                       扫描来源字段并生成版本快照
+GET  /api/field-diff/scans?source_id=1           快照版本列表
+POST /api/field-diff/diffs                       生成/复用对照批次
+GET  /api/field-diff/diffs/{id}                  差异明细（待确认/已确认分区返回）
+POST /api/field-diff/entries/{id}/confirm        逐条确认（含「已更正别名」）
+POST /api/field-diff/diffs/{id}/confirm          整批确认（有待确认项时拒绝）
+POST /api/field-diff/models/{id}/promotions      投产校验：读取并冻结差异
+POST /api/field-diff/promotions/{id}/finish      写校验结论并回写差异清单
+GET  /api/field-diff/promotions/{id}             重新查询本次投产
+```
+
+
 ## 约定
 
 - 全部模块共享`frontend/src/views/WorkbenchView.vue|tsx`和一套资源路由。

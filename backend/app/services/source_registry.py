@@ -55,7 +55,13 @@ class SourceRegistryService(BaseModuleService):
 
         current_schema = _discover_schema(entry.get("源类型", "unknown"))
         recorded = _get_semantic_models_for_source(source_id)
-        recorded_fields = {r.get("字段别名", ""): r.get("字段别名", "") for r in recorded}
+        # 「字段别名」是一串以逗号分隔的别名，按单个字段比较，不能把整串当一个字段。
+        recorded_fields = {
+            token.strip()
+            for r in recorded
+            for token in str(r.get("字段别名", "")).replace("，", ",").split(",")
+            if token.strip()
+        }
 
         new_fields = [f for f in current_schema if f not in recorded_fields]
         removed_fields = [f for f in recorded_fields if f not in current_schema]

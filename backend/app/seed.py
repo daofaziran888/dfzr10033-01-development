@@ -5,9 +5,70 @@ from typing import Any
 def _seed(id: int, fields: dict[str, str]) -> dict[str, Any]:
     return {"id": id, "status": "草稿", "pending": True, "abnormal": False, **fields}
 
+
+def _scan_field(field_id: str, name: str, physical: str = "") -> dict[str, str]:
+    return {"field_id": field_id, "name": name, "physical_column": physical or name, "data_type": "string"}
+
+
+# 字段变更对照的演示数据：来源 1 有 v1/v2 两版字段快照，语义模型 1 的
+# order_amount 在 v2 里物理列改名为 amount_cents（字段标识未变，别名应沿用），
+# 而 name 在 v2 中彻底消失（真正的缺列，需人工确认）。
+_SEED_SCAN_FIELDS = [
+    _scan_field("S1-C01", "id"),
+    _scan_field("S1-C02", "user_id"),
+    _scan_field("S1-C03", "order_amount"),
+    _scan_field("S1-C04", "name"),
+    _scan_field("S1-C05", "region"),
+]
+_SEED_SCAN_FIELDS_V2 = [
+    _scan_field("S1-C01", "id"),
+    _scan_field("S1-C02", "user_id"),
+    _scan_field("S1-C03", "order_amount", "amount_cents"),
+    _scan_field("S1-C05", "region"),
+    _scan_field("S1-C06", "category", "category"),
+]
+
 SEED_ROWS: dict[str, list[dict[str, Any]]] = {
+    "field_scan_batch": [
+        {
+            "id": 1, "scan_batch_id": "SCAN-0001-0001", "source_id": 1, "source_no": "SOUR-0001",
+            "source_type": "mysql", "batch_no": "SEED-20261101", "version": 1,
+            "fields": _SEED_SCAN_FIELDS, "field_count": len(_SEED_SCAN_FIELDS),
+            "input_digest": "seed-scan-v1", "scanned_by": "auto_discover",
+            "scanned_at": "2026-11-01 08:00:00", "status": "历史",
+            "pending": False, "abnormal": False,
+        },
+        {
+            "id": 2, "scan_batch_id": "SCAN-0001-0002", "source_id": 1, "source_no": "SOUR-0001",
+            "source_type": "mysql", "batch_no": "SEED-20261115", "version": 2,
+            "fields": _SEED_SCAN_FIELDS_V2, "field_count": len(_SEED_SCAN_FIELDS_V2),
+            "input_digest": "seed-scan-v2", "scanned_by": "auto_discover",
+            "scanned_at": "2026-11-15 08:00:00", "status": "生效",
+            "pending": False, "abnormal": False,
+        },
+    ],
+    "field_alias": [
+        {
+            "id": 1, "model_id": 1, "source_id": 1, "source_no": "SOUR-0001",
+            "alias_version": 1, "field_id": "S1-C01", "alias": "id",
+            "physical_column": "id", "status": "生效", "confirmed_by": "system",
+            "note": "模型字段别名初始化", "created_at": "2026-11-01 08:00:00",
+        },
+        {
+            "id": 2, "model_id": 1, "source_id": 1, "source_no": "SOUR-0001",
+            "alias_version": 1, "field_id": "S1-C04", "alias": "name",
+            "physical_column": "name", "status": "生效", "confirmed_by": "system",
+            "note": "模型字段别名初始化", "created_at": "2026-11-01 08:00:00",
+        },
+        {
+            "id": 3, "model_id": 1, "source_id": 1, "source_no": "SOUR-0001",
+            "alias_version": 1, "field_id": "S1-C03", "alias": "order_amount",
+            "physical_column": "order_amount", "status": "生效", "confirmed_by": "system",
+            "note": "模型字段别名初始化", "created_at": "2026-11-01 08:00:00",
+        },
+    ],
     "source_registry": [_seed(1, {"源编号":"SOUR-0001","源类型":"mysql","连接地址":"db://demo","驱动配置":"mysql_driver","数据库名":"demo_db","认证方式":"token","接入状态":"待验证","最近同步":"2026-11-01"})],
-    "semantic_model": [_seed(1, {"模型编号":"SEMA-0001","模型名称":"语义模型样例","源表映射":"source_registry:1","字段别名":"id,name","度量定义":"COUNT(*),SUM(value)","维度定义":"region,category","计算口径":"标准口径","版本序号":"v1.0"})],
+    "semantic_model": [_seed(1, {"模型编号":"SEMA-0001","模型名称":"语义模型样例","源表映射":"source_registry:1","字段别名":"id,name,order_amount","度量定义":"COUNT(*),SUM(order_amount),COUNT(name)","维度定义":"region,category","计算口径":"标准口径","版本序号":"v1.0"})],
     "query_federation": [_seed(1, {"计划编号":"QUER-0001","参与来源":"SOUR-0001","关联键":"id","下推策略":"FULL_PUSHDOWN","数据量估算":"1000","并行度":"4","超时上限":"30s","结果合并":"DIRECT"})],
     "olap_cube": [_seed(1, {"立方编号":"OLAP-0001","立方名称":"多维立方样例","维度列表":"region,category","度量列表":"revenue,orders","聚合类型":"SUM","分区策略":"dt","刷新周期":"3600","数据行数":"0"})],
     "metric_factory": [_seed(1, {"指标编号":"METR-0001","指标名称":"指标工厂样例","数据来源":"olap_cube:1","计算公式":"SUM(revenue)","聚合窗口":"daily","精度模式":"exact","依赖立方":"1","最后产出":"2026-11-01"})],
